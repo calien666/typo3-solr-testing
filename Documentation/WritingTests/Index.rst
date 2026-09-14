@@ -4,11 +4,10 @@
 Writing tests
 =============
 
-.. warning::
-    The PHP test case described on this page is **not implemented yet**. The
-    Solr service and the runner integration in :ref:`installation-runtests` are
-    available; everything below documents the intended API and will change until
-    the first release.
+.. note::
+    The base test case, the core lifecycle and the count assertions described here
+    are implemented. The fixture import and `assertSolrDataSet()` referred to from
+    :doc:`../Fixtures/Index` and :doc:`../Assertions/Index` are not yet.
 
 The base test case
 ==================
