@@ -1,0 +1,12 @@
+# Distinct entries, one resolved id.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'First'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Second'

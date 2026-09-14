@@ -1,0 +1,8 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title:
+      - 'one'
+      - 'two'
