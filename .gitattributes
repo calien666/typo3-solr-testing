@@ -1,0 +1,12 @@
+# Keep development-only paths out of the dist archive.
+# Anything listed here is absent from a `composer require` install, so shipped
+# code under Classes/ and Resources/ must never reference it.
+/.Build/          export-ignore
+/.editorconfig    export-ignore
+/.gitattributes   export-ignore
+/.github/         export-ignore
+/.gitignore       export-ignore
+/Build/           export-ignore
+/Tests/           export-ignore
+/CLAUDE.md        export-ignore
+/DEVELOPMENT.md   export-ignore
