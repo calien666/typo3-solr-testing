@@ -30,6 +30,7 @@ printSummary() {
     echo "PHP: ${PHP_VERSION}" >&2
     echo "TYPO3 core: ${CORE_VERSION}" >&2
     if [[ ${TEST_SUITE} =~ ^functional$ ]]; then
+        echo "Solr: ${SOLR_DISTRIBUTION} ${SOLR_VERSION}" >&2
         case "${DBMS}" in
             mariadb|mysql|postgres)
                 echo "DBMS: ${DBMS}  version ${DBMS_VERSION}  driver ${DATABASE_DRIVER}" >&2
@@ -145,6 +146,32 @@ handleDbmsOptions() {
     esac
 }
 
+handleSolrOptions() {
+    case ${SOLR_DISTRIBUTION} in
+        ext-solr)
+            # The image tag has to match the installed EXT:solr minor: its
+            # configset name is version stamped, so a mismatched image carries a
+            # configset the extension does not ask for. Accepted values mirror
+            # composer.json, exactly as -t does.
+            [ -z "${SOLR_VERSION}" ] && SOLR_VERSION="14.0"
+            if ! [[ ${SOLR_VERSION} =~ ^(14\.0)$ ]]; then
+                echo "Invalid combination -S ${SOLR_DISTRIBUTION} -V ${SOLR_VERSION}" >&2
+                exit 1
+            fi
+            ;;
+        apache)
+            # Any published apache/solr tag. Deliberately unrestricted: production
+            # commonly runs a newer server than EXT:solr ships an image for, and
+            # testing that pairing is the reason this distribution exists.
+            [ -z "${SOLR_VERSION}" ] && SOLR_VERSION="10.0.0"
+            ;;
+        *)
+            echo "Invalid option -S ${SOLR_DISTRIBUTION}" >&2
+            exit 1
+            ;;
+    esac
+}
+
 cleanCacheFiles() {
     echo -n "Clean caches ... "
     rm -rf \
@@ -157,7 +184,9 @@ cleanCacheFiles() {
 cleanTestFiles() {
     echo -n "Clean test related files ... "
     rm -rf \
-        .Build/Web/typo3temp/var/tests/
+        .Build/Web/typo3temp/var/tests/ \
+        .Build/solr-* \
+        Documentation-GENERATED-temp
     echo "done"
 }
 
@@ -184,6 +213,7 @@ Options:
             - lintPhp: PHP syntax check of all shipped and test PHP files
             - checkBom: find UTF-8 byte order marks, which TYPO3 forbids
             - checkExceptionCodes: find duplicate exception codes
+            - renderDocumentation: render Documentation/ and fail on any warning
 
         Composer, run inside the container so the host never needs PHP:
             - composer: pass everything after "--" straight to composer
@@ -211,6 +241,24 @@ Options:
 
         The switch itself is a "composer require --dev typo3/minimal:^<version>"
         on top of an untouched composer.json, which is restored afterwards.
+
+    -S <ext-solr|apache>
+        Only with -s functional. Solr distribution. Default: ext-solr
+
+        ext-solr is docker.io/typo3solr/ext-solr, which carries EXT:solr's
+        configsets, its language cores and the Java plugin its solrconfig.xml
+        registers. apache is a plain docker.io/apache/solr, into which that whole
+        skeleton is provisioned from the installed extension — production commonly
+        runs a newer server than EXT:solr publishes an image for, and this is how
+        that pairing gets tested.
+
+    -V <version>
+        Only with -s functional. Solr version. Defaults to 14.0 for ext-solr and
+        10.0.0 for apache.
+
+        The accepted values differ per distribution on purpose. An ext-solr tag
+        has to match the installed EXT:solr minor, because its configset name is
+        version stamped; an apache tag is any published one.
 
     -d <sqlite|mariadb|mysql|postgres>
         Only with -s functional. Default: sqlite
@@ -260,6 +308,9 @@ ROOT_DIR="${PWD}"
 TEST_SUITE="unit"
 DBMS="sqlite"
 DBMS_VERSION=""
+SOLR_DISTRIBUTION="ext-solr"
+SOLR_VERSION=""
+SOLR_ENABLED_CORES="${SOLR_ENABLED_CORES:-english german danish}"
 PHP_VERSION="8.2"
 CORE_VERSION="14"
 PHP_XDEBUG_ON=0
@@ -287,7 +338,7 @@ CONTAINER_HOST="host.docker.internal"
 OPTIND=1
 # Array for invalid options
 INVALID_OPTIONS=()
-while getopts ":a:b:s:d:i:p:t:xy:nhu" OPT; do
+while getopts ":a:b:s:d:i:p:t:S:V:xy:nhu" OPT; do
     case ${OPT} in
         s)
             TEST_SUITE=${OPTARG}
@@ -306,6 +357,12 @@ while getopts ":a:b:s:d:i:p:t:xy:nhu" OPT; do
             ;;
         i)
             DBMS_VERSION=${OPTARG}
+            ;;
+        S)
+            SOLR_DISTRIBUTION=${OPTARG}
+            ;;
+        V)
+            SOLR_VERSION=${OPTARG}
             ;;
         t)
             CORE_VERSION=${OPTARG}
@@ -357,6 +414,7 @@ if [ ${#INVALID_OPTIONS[@]} -ne 0 ]; then
 fi
 
 handleDbmsOptions
+handleSolrOptions
 
 if [ "${CI}" == "true" ]; then
     CONTAINER_INTERACTIVE=""
@@ -391,6 +449,7 @@ if ! type ${CONTAINER_BIN} >/dev/null 2>&1; then
     exit 1
 fi
 
+IMAGE_DOCS="ghcr.io/typo3-documentation/render-guides:0.40"
 IMAGE_PHP="ghcr.io/typo3/core-testing-$(echo "php${PHP_VERSION}" | sed -e 's/\.//'):latest"
 IMAGE_MARIADB="docker.io/mariadb:${DBMS_VERSION}"
 IMAGE_MYSQL="docker.io/mysql:${DBMS_VERSION}"
@@ -430,6 +489,11 @@ fi
 # COMPOSER_AUTH is forwarded bare, never interpolated, so a token never reaches a
 # command line. CI sets it to lift the GitHub API rate limit, which composer hits
 # when a cold cache pulls a few hundred dist archives.
+# Sourced exactly as a project's own runner would source it out of vendor/, so
+# the contract is exercised here rather than only documented.
+SOLR_LIB="${ROOT_DIR}/Build/Scripts/solr.sh"
+[ -f "${SOLR_LIB}" ] && . "${SOLR_LIB}"
+
 COMPOSER_PARAMS="-e COMPOSER_CACHE_DIR=.Build/.cache/composer -e COMPOSER_ROOT_VERSION=${COMPOSER_ROOT_VERSION} -e COMPOSER_NO_INTERACTION=1 -e COMPOSER_AUTH"
 
 case ${TEST_SUITE} in
@@ -493,6 +557,12 @@ case ${TEST_SUITE} in
         ;;
     functional)
         COMMAND=(.Build/bin/phpunit -c Build/phpunit/FunctionalTests.xml --exclude-group not-${DBMS} "$@")
+        if ! solrStart || ! solrWaitFor; then
+            echo "Solr did not come up. Container log follows." >&2
+            solrLogs >&2
+            SUITE_EXIT_CODE=1
+            printSummary
+        fi
         case ${DBMS} in
             mariadb)
                 echo "Using driver: ${DATABASE_DRIVER}"
@@ -523,6 +593,11 @@ case ${TEST_SUITE} in
     lintPhp)
         COMMAND="php -v | grep '^PHP'; find Classes Resources Tests -name \\*.php -print0 2>/dev/null | xargs -0 -r -n1 -P"'$(nproc 2>/dev/null || echo 4)'" php -dxdebug.mode=off -l >/dev/null"
         ${CONTAINER_BIN} run ${CONTAINER_COMMON_PARAMS} --name lint-php-${SUFFIX} ${IMAGE_PHP} /bin/sh -c "${COMMAND}"
+        SUITE_EXIT_CODE=$?
+        ;;
+    renderDocumentation)
+        ${CONTAINER_BIN} run ${CONTAINER_COMMON_PARAMS} --name render-documentation-${SUFFIX} ${IMAGE_DOCS} \
+            --fail-on-log --fail-on-error --no-progress --config=Documentation Documentation
         SUITE_EXIT_CODE=$?
         ;;
     phpstan)

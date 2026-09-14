@@ -56,6 +56,13 @@ jobs:
       - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s checkBom"
       - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s checkExceptionCodes"
 
+  documentation:
+    name: "documentation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: "Build/Scripts/runTests.sh -b docker -s renderDocumentation"
+
   phpstan:
     name: "phpstan"
     runs-on: ubuntu-latest
@@ -175,6 +182,7 @@ jobs:
       - "unit"
       - "functional-sqlite"
       - "functional-dbms"
+      - "documentation"
     steps:
       - name: "Report the result of every job"
         env:

@@ -95,6 +95,15 @@ Both are workarounds with an unknown shelf life, so `runner-canary.yml` runs the
 across `ubuntu-22.04`/`24.04`/`26.04` and `ubuntu-24.04-arm`, on both engines, without gating anything. When
 a cell is consistently green the gating workflow moves onto it and the lane is deleted.
 
+## Documentation
+
+The rendered manual lives in `Documentation/` and covers integrating Solr into your own `runTests.sh`,
+writing tests, fixture files, assertions and configuration:
+
+```shell
+Build/Scripts/runTests.sh -s renderDocumentation
+```
+
 ## Contributing
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the design, the upstream analysis it rests on and the implementation
