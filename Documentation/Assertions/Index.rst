@@ -4,9 +4,6 @@
 Assertions
 ==========
 
-.. warning::
-    Not implemented yet. This documents the intended API.
-
 Counting
 ========
 
@@ -15,8 +12,21 @@ Counting
     $this->assertSolrIsEmpty();
     $this->assertSolrContainsDocumentCount(3);
 
+A field the schema indexes without storing is never returned by a select, so it
+can only be asserted by querying for it:
+
+.. code-block:: php
+
+    self::assertSame(
+        2,
+        $this->getSolrServer()->countDocumentsMatching($this->getSolrCoreName(), 'appKey:"EXT:solr"'),
+    );
+
 Comparing against a fixture
 ===========================
+
+.. warning::
+    `assertSolrDataSet()` is not implemented yet. This documents the intended API.
 
 `assertSolrDataSet()` is to Solr what `assertCSVDataSet()` is to the database,
 and takes the same YAML a fixture import takes:

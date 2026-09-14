@@ -1,0 +1,6 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    thisFieldDoesNotExist: 'nor does it match a dynamic pattern'

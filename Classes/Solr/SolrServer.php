@@ -88,9 +88,55 @@ final class SolrServer
 
     public function countDocuments(string $coreName): int
     {
-        $response = $this->request('/' . $coreName . '/select?q=*:*&rows=0&wt=json');
+        return $this->countDocumentsMatching($coreName, '*:*');
+    }
+
+    /**
+     * Counts documents matching a Solr query, which is the only way to assert on a
+     * field the schema does not store — it is indexed and therefore searchable, but
+     * never returned by a select.
+     */
+    public function countDocumentsMatching(string $coreName, string $query): int
+    {
+        $response = $this->request(
+            '/' . $coreName . '/select?q=' . rawurlencode($query) . '&rows=0&wt=json',
+        );
 
         return (int)($response['response']['numFound'] ?? 0);
+    }
+
+    public function getSchema(string $coreName): SolrSchema
+    {
+        $uniqueKey = (string)($this->request('/' . $coreName . '/schema/uniquekey?wt=json')['uniqueKey'] ?? 'id');
+
+        $fields = [];
+        foreach ($this->request('/' . $coreName . '/schema/fields?wt=json')['fields'] ?? [] as $field) {
+            if (is_array($field) && isset($field['name']) && is_string($field['name'])) {
+                $fields[$field['name']] = $field;
+            }
+        }
+
+        $dynamicFields = [];
+        foreach ($this->request('/' . $coreName . '/schema/dynamicfields?wt=json')['dynamicFields'] ?? [] as $field) {
+            if (is_array($field) && isset($field['name']) && is_string($field['name'])) {
+                $dynamicFields[$field['name']] = $field;
+            }
+        }
+
+        return new SolrSchema($uniqueKey, $fields, $dynamicFields);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function findDocumentById(string $coreName, string $id): array
+    {
+        $response = $this->request(
+            '/' . $coreName . '/select?q=id:' . rawurlencode('"' . $id . '"') . '&rows=1&wt=json',
+        );
+        $document = $response['response']['docs'][0] ?? [];
+
+        return is_array($document) ? $document : [];
     }
 
     /**

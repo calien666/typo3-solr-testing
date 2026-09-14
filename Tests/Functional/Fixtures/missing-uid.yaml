@@ -1,0 +1,5 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    title: 'No uid, so no id can be derived'
