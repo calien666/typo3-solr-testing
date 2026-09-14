@@ -86,21 +86,18 @@ final class SolrServer
         ));
     }
 
-    public function countDocuments(string $coreName): int
-    {
-        return $this->countDocumentsMatching($coreName, '*:*');
-    }
-
     /**
-     * Counts documents matching a Solr query, which is the only way to assert on a
-     * field the schema does not store — it is indexed and therefore searchable, but
-     * never returned by a select.
+     * Counts documents, optionally narrowed.
+     *
+     * $query is what a visitor searched for and goes through the handler's edismax
+     * defaults. $filterQuery is structural — a type, an id — and must be a filter
+     * rather than part of $query: the handler sets `mm`, so a `q` of two clauses
+     * demands a document matching both, and `type:("a" OR "b")` therefore finds
+     * nothing at all.
      */
-    public function countDocumentsMatching(string $coreName, string $query): int
+    public function countDocuments(string $coreName, string $query = '*:*', ?string $filterQuery = null): int
     {
-        $response = $this->request(
-            '/' . $coreName . '/select?q=' . rawurlencode($query) . '&rows=0&wt=json',
-        );
+        $response = $this->request($this->buildSelectPath($coreName, $query, $filterQuery, 0));
 
         return (int)($response['response']['numFound'] ?? 0);
     }
@@ -132,11 +129,51 @@ final class SolrServer
     public function findDocumentById(string $coreName, string $id): array
     {
         $response = $this->request(
-            '/' . $coreName . '/select?q=id:' . rawurlencode('"' . $id . '"') . '&rows=1&wt=json',
+            $this->buildSelectPath($coreName, '*:*', 'id:"' . $id . '"', 1),
         );
         $document = $response['response']['docs'][0] ?? [];
 
         return is_array($document) ? $document : [];
+    }
+
+    private function buildSelectPath(string $coreName, string $query, ?string $filterQuery, int $rows): string
+    {
+        $path = sprintf('/%s/select?q=%s&rows=%d&wt=json', $coreName, rawurlencode($query), $rows);
+
+        if ($filterQuery !== null) {
+            $path .= '&fq=' . rawurlencode($filterQuery);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Every document in the core, keyed by its unique id.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    /**
+     * Documents keyed by their unique id. See {@see countDocuments()} for why a
+     * structural narrowing belongs in $filterQuery rather than in $query.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function findDocuments(
+        string $coreName,
+        string $query = '*:*',
+        ?string $filterQuery = null,
+        string $uniqueKey = 'id',
+    ): array {
+        $response = $this->request($this->buildSelectPath($coreName, $query, $filterQuery, 10000));
+
+        $documents = [];
+        foreach ($response['response']['docs'] ?? [] as $document) {
+            if (is_array($document) && isset($document[$uniqueKey])) {
+                $documents[(string)$document[$uniqueKey]] = $document;
+            }
+        }
+
+        return $documents;
     }
 
     /**

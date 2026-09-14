@@ -86,6 +86,23 @@ Keys you write
 
 Every other key is written to Solr as a field of that name.
 
+Required fields
+---------------
+
+The schema EXT:solr ships marks three fields `required="true"` — `id`, `appKey`
+and `type` — so **a document without them cannot be indexed at all**. Solr itself
+refuses the update with `missing required field`.
+
+An import fills `id` and `appKey` by derivation, so in practice only `type` has to
+be written. Giving an `id` outright skips the derivation that would otherwise
+demand a `type`, and that is the one way to write a fixture Solr would reject; the
+import catches it first and names the file and the document rather than leaving
+you with an error about a core URL.
+
+This applies to an **import** only. An assertion compares the fields it lists, so
+requiring them there would force every expectation to restate `type` and `appKey`
+just to look at a `title`.
+
 Keys that are derived
 ---------------------
 
@@ -163,6 +180,8 @@ per core.
         -   1789398386
     *   -   No `id`, and no `siteHash`, `type` or `uid` to derive one from
         -   1789398387
+    *   -   A field the schema marks required is missing (import only)
+        -   1789399782
 
 .. important::
     Two of those are the reason the check exists at all, because Solr does not

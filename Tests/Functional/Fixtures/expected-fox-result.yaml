@@ -1,0 +1,7 @@
+# Only the first document; "fox" reaches it through the English stemmer.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Searching with Apache Solr'

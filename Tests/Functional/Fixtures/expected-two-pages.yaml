@@ -1,0 +1,12 @@
+# Two of the three pages, so the third is reported as uncovered.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Document 10'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Document 11'

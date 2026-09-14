@@ -18,6 +18,7 @@ declare(strict_types=1);
 namespace Calien\SolrTesting;
 
 use ApacheSolrForTypo3\Solr\ConnectionManager;
+use ApacheSolrForTypo3\Solr\Domain\Search\Query\Helper\EscapeService;
 use ApacheSolrForTypo3\Solr\Domain\Site\SiteHashService;
 use ApacheSolrForTypo3\Solr\System\Cache\TwoLevelCache;
 use ApacheSolrForTypo3\Solr\System\Util\SiteUtility;
@@ -147,6 +148,233 @@ abstract class SolrFunctionalTestCase extends FunctionalTestCase
     }
 
     /**
+     * Compares the index with a YAML fixture, the way assertCSVDataSet() compares
+     * the database with a CSV one.
+     *
+     * Only the fields a fixture lists are compared — a Solr document carries dozens,
+     * and demanding all of them would make every assertion unmaintainable.
+     *
+     * The comparison is scoped to the document types the fixture lists, so asserting
+     * three pages fails when the index holds six of them, while documents of other
+     * types are left alone. It compares a fixture with the index and takes nothing
+     * else; to assert what a search returns, see {@see assertSolrSearchResults()}.
+     *
+     * @throws InvalidSolrDataSetException
+     */
+    protected function assertSolrDataSet(string $path): void
+    {
+        $this->assertSolrDataSetWithin($path, null);
+    }
+
+    /**
+     * @param string|null $searchQuery what a visitor searched for, or null to compare
+     *                                 against the types the fixture lists
+     */
+    private function assertSolrDataSetWithin(string $path, ?string $searchQuery): void
+    {
+        $schema = $this->getSolrSchema();
+        $expectations = SolrDataSet::expectationsFromFile(
+            $path,
+            $schema,
+            fn(int $rootPageId): string => $this->buildSolrSiteHash($rootPageId),
+        );
+
+        $failures = [];
+        foreach ($this->buildSolrAssertionScopes($expectations, $searchQuery) as $scope) {
+            $failures = [...$failures, ...$this->compareSolrScope($scope, $expectations, $schema, $path)];
+        }
+
+        if ($failures !== []) {
+            self::fail(sprintf('Asserting "%s":%s%s', $path, PHP_EOL, implode(PHP_EOL, $failures)));
+        }
+
+        // Keeps an empty expectation from tripping "did not perform any assertions".
+        // Written the way the testing framework writes it in assertCSVDataSet().
+        self::assertThat(true, self::isTrue());
+    }
+
+    /**
+     * One scope per document type, each fetched with its own single-clause filter.
+     *
+     * This is what assertCSVDataSet() does with its tables, and it avoids composing
+     * a query at all: one clause can never trip the `mm` the request handler sets,
+     * and a failure names the type it came from.
+     *
+     * @return list<array{label: string, query: string, filter: string|null, documents: list<array<string, mixed>>}>
+     */
+    private function buildSolrAssertionScopes(SolrDataSet $expectations, ?string $searchQuery): array
+    {
+        if ($searchQuery !== null) {
+            return [[
+                'label' => 'the search "' . $searchQuery . '"',
+                'query' => $searchQuery,
+                'filter' => null,
+                'documents' => $expectations->getDocuments(),
+            ]];
+        }
+
+        $groups = $expectations->groupByType();
+        if ($groups === null) {
+            return [[
+                'label' => 'the whole index',
+                'query' => '*:*',
+                'filter' => null,
+                'documents' => $expectations->getDocuments(),
+            ]];
+        }
+
+        $scopes = [];
+        foreach ($groups as $type => $documents) {
+            $scopes[] = [
+                'label' => 'type "' . $type . '"',
+                'query' => '*:*',
+                'filter' => 'type:"' . $type . '"',
+                'documents' => $documents,
+            ];
+        }
+
+        return $scopes;
+    }
+
+    /**
+     * @param array{label: string, query: string, filter: string|null, documents: list<array<string, mixed>>} $scope
+     * @return list<string>
+     */
+    private function compareSolrScope(array $scope, SolrDataSet $expectations, SolrSchema $schema, string $path): array
+    {
+        $uniqueKey = $schema->getUniqueKey();
+        $remaining = $this->getSolrServer()->findDocuments(
+            $this->solrCoreName,
+            $scope['query'],
+            $scope['filter'],
+            $uniqueKey,
+        );
+        $failures = [];
+
+        foreach ($scope['documents'] as $expected) {
+            $id = (string)$expected[$uniqueKey];
+
+            if (!isset($remaining[$id])) {
+                $failures[] = sprintf('Document "%s" not found in %s.', $id, $scope['label']);
+                continue;
+            }
+
+            $differences = $this->findSolrFieldDifferences($expected, $remaining[$id], $schema, $path);
+            if ($differences !== []) {
+                $failures[] = sprintf(
+                    'Assertion in data-set failed for "%s":%s%s',
+                    $id,
+                    PHP_EOL,
+                    implode(PHP_EOL, $differences),
+                );
+            }
+
+            unset($remaining[$id]);
+        }
+
+        // What no positive assertion can see: the index holding documents the fixture
+        // never mentioned. Reduced to the fields the fixture declares, the way
+        // assertCSVDataSet() renders an unexpected record — a whole Solr document
+        // carries scoring, versions and copy fields nobody wrote.
+        $assertedFields = $expectations->getAssertedFieldNames();
+        foreach ($remaining as $id => $document) {
+            $reduced = $assertedFields === []
+                ? $document
+                : array_intersect_key($document, array_flip($assertedFields));
+
+            $failures[] = sprintf(
+                'Not asserted document found in %s for "%s": %s',
+                $scope['label'],
+                $id,
+                json_encode($reduced, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+            );
+        }
+
+        return $failures;
+    }
+
+    /**
+     * @param array<string, mixed> $expected
+     * @param array<string, mixed> $actual
+     * @return list<string>
+     */
+    private function findSolrFieldDifferences(
+        array $expected,
+        array $actual,
+        SolrSchema $schema,
+        string $path,
+    ): array {
+        $differences = [];
+
+        foreach ($expected as $field => $expectedValue) {
+            if (!$schema->isStored($field)) {
+                throw new InvalidSolrDataSetException(
+                    sprintf(
+                        '"%s" expects "%s", which the schema indexes without storing, so a query never returns it. '
+                        . 'Assert it with countDocuments() instead.',
+                        $path,
+                        $field,
+                    ),
+                    1789398800,
+                );
+            }
+
+            // "\*" asserts the field is present without pinning its value, as the
+            // CSV data set does — for a timestamp, or anything a test cannot predict.
+            if (is_string($expectedValue) && str_starts_with($expectedValue, '\\*')) {
+                continue;
+            }
+
+            $actualValue = $actual[$field] ?? null;
+            if ($actualValue !== $expectedValue) {
+                $differences[] = sprintf(
+                    '    %s: expected %s, got %s',
+                    $field,
+                    json_encode($expectedValue, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+                    json_encode($actualValue, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+                );
+            }
+        }
+
+        return $differences;
+    }
+
+    /**
+     * Asserts what searching for a term returns, rather than what a Solr query
+     * selects.
+     *
+     * The term is escaped the way EXT:solr escapes what a visitor typed, so a colon
+     * or a dash in it stays text instead of turning into query syntax. It then goes
+     * to the same request handler a search does, which means edismax over the
+     * configured fields and the analysis chain of this core's language — a search
+     * for the singular reaches a document holding the plural, which no field query
+     * would.
+     */
+    protected function assertSolrSearchResults(string $searchTerm, string $path): void
+    {
+        $this->assertSolrDataSetWithin($path, $this->buildSolrSearchQuery($searchTerm));
+    }
+
+    protected function assertSolrSearchCount(string $searchTerm, int $expectedCount, string $message = ''): void
+    {
+        self::assertSame(
+            $expectedCount,
+            $this->getSolrServer()->countDocuments(
+                $this->solrCoreName,
+                $this->buildSolrSearchQuery($searchTerm),
+            ),
+            $message !== '' ? $message : sprintf('Searching for "%s" returned an unexpected number of documents.', $searchTerm),
+        );
+    }
+
+    protected function buildSolrSearchQuery(string $searchTerm): string
+    {
+        // EscapeService returns the value it was given when it is numeric, so the
+        // return type is wider than the string a query has to be.
+        return (string)EscapeService::escape($searchTerm);
+    }
+
+    /**
      * The id EXT:solr gives a record, so a test can look a document up without
      * repeating the derivation.
      */
@@ -174,12 +402,24 @@ abstract class SolrFunctionalTestCase extends FunctionalTestCase
         $this->assertSolrContainsDocumentCount(0);
     }
 
-    protected function assertSolrContainsDocumentCount(int $expectedCount, string $message = ''): void
-    {
+    /**
+     * Counts the whole core unless $query narrows it, so it can be scoped the same
+     * way assertSolrDataSet() is — counting everything is misleading as soon as more
+     * than one document type is indexed.
+     */
+    protected function assertSolrContainsDocumentCount(
+        int $expectedCount,
+        string $message = '',
+        ?string $query = null,
+    ): void {
         self::assertSame(
             $expectedCount,
-            $this->getSolrServer()->countDocuments($this->solrCoreName),
-            $message !== '' ? $message : sprintf('Solr core "%s" holds an unexpected number of documents.', $this->solrCoreName),
+            $this->getSolrServer()->countDocuments($this->solrCoreName, '*:*', $query),
+            $message !== '' ? $message : sprintf(
+                'Solr core "%s" holds an unexpected number of documents matching "%s".',
+                $this->solrCoreName,
+                $query ?? '*:*',
+            ),
         );
     }
 

@@ -59,6 +59,37 @@ final class SolrSchema
     }
 
     /**
+     * A field the schema indexes without storing is searchable but never returned
+     * by a select, so it can be queried for but not read back.
+     */
+    public function isStored(string $name): bool
+    {
+        $definition = $this->fields[$name] ?? $this->matchDynamicField($name) ?? [];
+
+        return ($definition['stored'] ?? false) === true;
+    }
+
+    /**
+     * Names of the fields the schema refuses a document without.
+     *
+     * Only declared fields can be required; a dynamic pattern never is.
+     *
+     * @return list<string>
+     */
+    public function getRequiredFields(): array
+    {
+        $required = [];
+
+        foreach ($this->fields as $name => $definition) {
+            if (($definition['required'] ?? false) === true) {
+                $required[] = $name;
+            }
+        }
+
+        return $required;
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     private function matchDynamicField(string $name): ?array

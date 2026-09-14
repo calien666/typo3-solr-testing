@@ -1,0 +1,7 @@
+# Deliberately incomplete: the index holds two.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'A page'

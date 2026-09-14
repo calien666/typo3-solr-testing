@@ -1,0 +1,32 @@
+# Three pages and three news entries.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Document 10'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Document 11'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 12
+    title: 'Document 12'
+  -
+    rootPageId: 1
+    type: tx_news_domain_model_news
+    uid: 13
+    title: 'Document 13'
+  -
+    rootPageId: 1
+    type: tx_news_domain_model_news
+    uid: 14
+    title: 'Document 14'
+  -
+    rootPageId: 1
+    type: tx_news_domain_model_news
+    uid: 15
+    title: 'Document 15'

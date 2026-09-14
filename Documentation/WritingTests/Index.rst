@@ -4,11 +4,6 @@
 Writing tests
 =============
 
-.. note::
-    The base test case, the core lifecycle, the fixture import and the count
-    assertions are implemented. `assertSolrDataSet()`, described in
-    :doc:`../Assertions/Index`, is not yet.
-
 The base test case
 ==================
 

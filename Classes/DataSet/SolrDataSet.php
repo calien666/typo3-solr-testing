@@ -55,6 +55,34 @@ final class SolrDataSet
         SolrSchema $schema,
         callable $siteHashResolver,
     ): self {
+        return self::load($path, $schema, $siteHashResolver, true);
+    }
+
+    /**
+     * The same file read as an expectation rather than as something to write.
+     *
+     * appKey is not derived here: it is a field an import has to fill, while an
+     * assertion compares only what the fixture lists.
+     *
+     * @param callable(int): string $siteHashResolver
+     */
+    public static function expectationsFromFile(
+        string $path,
+        SolrSchema $schema,
+        callable $siteHashResolver,
+    ): self {
+        return self::load($path, $schema, $siteHashResolver, false);
+    }
+
+    /**
+     * @param callable(int): string $siteHashResolver
+     */
+    private static function load(
+        string $path,
+        SolrSchema $schema,
+        callable $siteHashResolver,
+        bool $deriveAppKey,
+    ): self {
         if (!is_readable($path)) {
             throw new InvalidSolrDataSetException(
                 sprintf('Solr data set "%s" does not exist or cannot be read.', $path),
@@ -83,8 +111,15 @@ final class SolrDataSet
                 );
             }
 
-            $document = self::derive($rawDocument, $path, $index, $siteHashResolver);
+            $document = self::derive($rawDocument, $path, $index, $siteHashResolver, $deriveAppKey);
             self::validateAgainstSchema($document, $schema, $path, $index);
+
+            // Only for an import. An expectation compares the fields it lists, so
+            // demanding the required ones there would force every assertion to
+            // restate type and appKey to look at a title.
+            if ($deriveAppKey) {
+                self::validateRequiredFields($document, $schema, $path, $index);
+            }
 
             $id = (string)$document[$schema->getUniqueKey()];
             if (isset($seenIds[$id])) {
@@ -122,6 +157,48 @@ final class SolrDataSet
     }
 
     /**
+     * Every field name any document in this set asserts.
+     *
+     * @return list<string>
+     */
+    public function getAssertedFieldNames(): array
+    {
+        $names = [];
+
+        foreach ($this->documents as $document) {
+            foreach (array_keys($document) as $name) {
+                $names[$name] = true;
+            }
+        }
+
+        return array_keys($names);
+    }
+
+    /**
+     * The documents grouped by type, or null when any of them has none.
+     *
+     * An indexed document always has a type — the schema marks it required — but an
+     * expectation need not list one, since it compares only the fields it names.
+     * Where that leaves the scope unclear, the caller compares against everything
+     * rather than guessing narrow.
+     *
+     * @return array<string, list<array<string, mixed>>>|null
+     */
+    public function groupByType(): ?array
+    {
+        $groups = [];
+
+        foreach ($this->documents as $document) {
+            if (!isset($document['type']) || !is_scalar($document['type'])) {
+                return null;
+            }
+            $groups[(string)$document['type']][] = $document;
+        }
+
+        return $groups;
+    }
+
+    /**
      * @param array<string, mixed> $rawDocument
      * @param callable(int): string $siteHashResolver
      * @return array<string, mixed>
@@ -131,13 +208,16 @@ final class SolrDataSet
         string $path,
         int $index,
         callable $siteHashResolver,
+        bool $deriveAppKey,
     ): array {
         $document = $rawDocument;
         foreach (self::CONTROL_KEYS as $controlKey) {
             unset($document[$controlKey]);
         }
 
-        $document['appKey'] ??= self::DERIVED_APP_KEY;
+        if ($deriveAppKey) {
+            $document['appKey'] ??= self::DERIVED_APP_KEY;
+        }
 
         if (isset($rawDocument['rootPageId'])) {
             $document['siteHash'] ??= $siteHashResolver((int)$rawDocument['rootPageId']);
@@ -165,6 +245,33 @@ final class SolrDataSet
         $document['id'] = sprintf('%s/%s/%s', $document['siteHash'], $document['type'], $document['uid']);
 
         return $document;
+    }
+
+    /**
+     * @param array<string, mixed> $document
+     */
+    private static function validateRequiredFields(
+        array $document,
+        SolrSchema $schema,
+        string $path,
+        int $index,
+    ): void {
+        foreach ($schema->getRequiredFields() as $field) {
+            if (isset($document[$field]) && $document[$field] !== '') {
+                continue;
+            }
+
+            throw new InvalidSolrDataSetException(
+                sprintf(
+                    'Document %d in "%s" has no "%s", which the schema marks required, so Solr would refuse it. '
+                    . 'EXT:solr cannot index a document without one.',
+                    $index,
+                    $path,
+                    $field,
+                ),
+                1789399782,
+            );
+        }
     }
 
     /**

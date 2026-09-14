@@ -65,7 +65,7 @@ final class SolrDataSetImportTest extends SolrFunctionalTestCase
         // it, so a select never returns it.
         self::assertSame(
             2,
-            $this->getSolrServer()->countDocumentsMatching($this->getSolrCoreName(), 'appKey:"EXT:solr"'),
+            $this->getSolrServer()->countDocuments($this->getSolrCoreName(), 'appKey:"EXT:solr"'),
         );
     }
 
@@ -109,6 +109,10 @@ final class SolrDataSetImportTest extends SolrFunctionalTestCase
             'fixture' => 'array-for-singlevalued.yaml',
             'expectedCode' => 1789398385,
         ];
+        yield 'a document missing a field the schema marks required' => [
+            'fixture' => 'no-type.yaml',
+            'expectedCode' => 1789399782,
+        ];
         yield 'a document without the uid its id is derived from' => [
             'fixture' => 'missing-uid.yaml',
             'expectedCode' => 1789398387,
@@ -127,6 +131,15 @@ final class SolrDataSetImportTest extends SolrFunctionalTestCase
         $this->importSolrDataSet(__DIR__ . '/Fixtures/unknown-field.yaml');
 
         $this->assertSolrContainsDocumentCount(1);
+    }
+
+    #[Test]
+    public function countsOnlyTheDocumentsMatchingAQuery(): void
+    {
+        $this->importSolrDataSet(__DIR__ . '/Fixtures/six-documents.yaml');
+
+        $this->assertSolrContainsDocumentCount(6);
+        $this->assertSolrContainsDocumentCount(3, '', 'type:pages');
     }
 
     #[Test]
