@@ -1,0 +1,6 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    titel: 'a typo the shipped schema would swallow'

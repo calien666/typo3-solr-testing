@@ -1,0 +1,13 @@
+# "\*" asserts the field is present without pinning its value, the way the CSV
+# data set does. Useful for a timestamp or anything else the test cannot predict.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: '\*'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Another page'

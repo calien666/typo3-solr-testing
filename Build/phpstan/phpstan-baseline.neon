@@ -1,0 +1,10 @@
+# PHPStan baseline.
+#
+# Regenerate with `Build/Scripts/runTests.sh -s phpstanGenerateBaseline`.
+#
+# Empty on purpose: a baseline records errors that are accepted for now, so
+# entries here are a deliberate decision by a maintainer, never a way to get a
+# run green. Prefer fixing the code.
+
+parameters:
+    ignoreErrors: []

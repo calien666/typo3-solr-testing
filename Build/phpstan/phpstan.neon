@@ -1,0 +1,33 @@
+# PHPStan configuration.
+#
+# A single config, because this package's own branch targets exactly one TYPO3
+# major. A project copying this tooling and spanning two majors wants the
+# Core13/Core14 split instead, selected from the runner's -t option.
+#
+# Run it through `Build/Scripts/runTests.sh -s phpstan`.
+
+includes:
+    - ../../.Build/vendor/phpstan/phpstan-phpunit/extension.neon
+    - ../../.Build/vendor/phpstan/phpstan-phpunit/rules.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 8
+
+    # Must cover every PHP file the package ships or tests with. A too-narrow
+    # "paths" silently analyses nothing and lets a broken use statement through.
+    paths:
+        - ../../Classes
+        - ../../Resources
+        - ../../Tests
+        - ../../Build/phpunit
+
+    # excludePaths fnmatches the full path, so a folder pattern must end in /*
+    excludePaths:
+        analyseAndScan:
+            - ../../.Build/*
+
+    bootstrapFiles:
+        - phpstan-constants.php
+
+    treatPhpDocTypesAsCertain: false

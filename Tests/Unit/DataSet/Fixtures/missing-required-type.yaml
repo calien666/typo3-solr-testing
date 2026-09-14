@@ -1,0 +1,6 @@
+# An explicit id skips the derivation that would have demanded a type.
+documents:
+  -
+    id: 'given/outright/1'
+    uid: 1
+    title: 'No type'

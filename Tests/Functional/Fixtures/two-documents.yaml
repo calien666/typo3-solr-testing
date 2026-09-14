@@ -1,0 +1,14 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'A page'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Another page'
+    keywords:
+      - alpha
+      - beta

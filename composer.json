@@ -1,0 +1,78 @@
+{
+    "name": "calien/typo3-solr-testing",
+    "description": "Solr support for TYPO3 functional tests: an isolated Solr core per test class, document fixtures and runTests.sh building blocks.",
+    "keywords": [
+        "typo3",
+        "solr",
+        "testing",
+        "tests",
+        "functional-tests"
+    ],
+    "homepage": "https://github.com/calien666/typo3-solr-testing",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Markus Hofmann",
+            "email": "typo3@calien.de",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/calien666/typo3-solr-testing/issues",
+        "source": "https://github.com/calien666/typo3-solr-testing"
+    },
+    "require": {
+        "php": "^8.2 || ^8.3 || ^8.4 || ^8.5",
+        "ext-json": "*",
+        "phpunit/phpunit": "^11.5.56",
+        "sbuerk/typo3-site-based-test-trait": "^3.0",
+        "symfony/yaml": "^7.4.12",
+        "typo3/cms-core": "^14.3.6",
+        "typo3/testing-framework": "^9.5"
+    },
+    "require-dev": {
+        "apache-solr-for-typo3/solr": "^14.0",
+        "friendsofphp/php-cs-fixer": "^3.94.2",
+        "phpstan/phpstan": "^2.1.42",
+        "phpstan/phpstan-phpunit": "^2.0.16",
+        "sbuerk/fixture-packages": "^1.1.3"
+    },
+    "conflict": {
+        "apache-solr-for-typo3/solr": "<14.0 || >=15.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Calien\\SolrTesting\\": "Classes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Calien\\SolrTesting\\Tests\\": "Tests/"
+        }
+    },
+    "config": {
+        "vendor-dir": ".Build/vendor",
+        "bin-dir": ".Build/bin",
+        "sort-packages": true,
+        "allow-plugins": {
+            "sbuerk/fixture-packages": true,
+            "typo3/class-alias-loader": true,
+            "typo3/cms-composer-installers": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "14.x-dev"
+        },
+        "sbuerk/fixture-packages": {
+            "paths": {
+                "Tests/Fixtures/Extensions/*": [
+                    "autoload"
+                ]
+            }
+        },
+        "typo3/cms": {
+            "web-dir": ".Build/Web"
+        }
+    }
+}

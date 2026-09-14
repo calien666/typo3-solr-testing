@@ -1,0 +1,9 @@
+# actionlint validates "runs-on" against a label list baked into its own release,
+# so a runner image still in preview is reported as unknown. ubuntu-26.04 is a
+# real GitHub hosted label; declaring it here is actionlint's documented escape
+# hatch for labels it does not know about yet.
+#
+# Remove the entry once actionlint ships a release that knows the label.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

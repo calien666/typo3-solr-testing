@@ -1,0 +1,13 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Searching with Apache Solr'
+    content: 'The quick brown foxes jumped over the lazy dogs.'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Something else entirely'
+    content: 'Nothing here mentions the animal at all.'

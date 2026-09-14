@@ -1,0 +1,7 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    # appKey is indexed but not stored, so it can never be read back.
+    appKey: 'EXT:solr'

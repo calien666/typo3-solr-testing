@@ -1,0 +1,17 @@
+# The three pages only.
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'Document 10'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 11
+    title: 'Document 11'
+  -
+    rootPageId: 1
+    type: pages
+    uid: 12
+    title: 'Document 12'

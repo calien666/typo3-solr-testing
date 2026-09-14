@@ -1,0 +1,12 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    title: 'A page'
+  -
+    rootPageId: 1
+    type: tx_news_domain_model_news
+    uid: 11
+    keywords:
+      - alpha

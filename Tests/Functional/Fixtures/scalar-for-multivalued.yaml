@@ -1,0 +1,7 @@
+documents:
+  -
+    rootPageId: 1
+    type: pages
+    uid: 10
+    # "keywords" is multiValued; Solr would silently wrap this.
+    keywords: 'just one'

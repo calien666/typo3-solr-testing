@@ -1,0 +1,7 @@
+# An explicit id skips the derivation that would otherwise demand a type — but the
+# schema marks type required, so Solr could never hold this document.
+documents:
+  -
+    id: 'somehash/pages/99'
+    uid: 99
+    title: 'No type'

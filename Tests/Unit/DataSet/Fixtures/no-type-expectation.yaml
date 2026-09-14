@@ -1,0 +1,5 @@
+# Named by id alone, which an expectation may do: it compares the fields it lists.
+documents:
+  -
+    id: 'given/outright/1'
+    title: 'no type here'
