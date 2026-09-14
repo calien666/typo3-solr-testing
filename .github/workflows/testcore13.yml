@@ -1,0 +1,25 @@
+name: tests core 13
+
+# Placeholder on main: reports the same check name as the real workflow so one
+# branch ruleset covers both maintained branches. The v13 matrix lives in this
+# file on release-13.x. Never delete it — a required check that stops reporting
+# blocks every pull request.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+
+  all-checks:
+    name: "all checks"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TYPO3 13 is not built on this branch; see release-13.x."

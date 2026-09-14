@@ -1,0 +1,185 @@
+name: tests core 14
+
+# cgl     ─┐
+# phpstan ─┼─> unit ─> functional (sqlite) ─> functional (mariadb, mysql, postgres)
+# lint    ─┘
+#
+# "-b docker" is a workaround, not a preference: podman stays the script default
+# and what developers run locally, but GitHub's podman/crun pairing has been
+# intermittently aborting the first container start of a job since 2026-07-29
+# ("crun: unknown version specified", exit 126). runner-canary.yml watches for it
+# clearing, along with the ubuntu-22.04 pin the functional jobs still need.
+#
+# Two PHP sets: edges 8.2/8.5 for everything that varies by runtime, lowest for
+# cgl and phpstan, which inspect the same files whatever the runtime. The minors
+# in between are covered by the edges. composer.json still enumerates all four —
+# it documents what is supported, not what each job runs.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+# Lifts composer's unauthenticated GitHub limit of 60 requests per hour, which a
+# cold cache exhausts. runTests.sh forwards it with a bare "-e COMPOSER_AUTH", so
+# the token never reaches a command line.
+env:
+  COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ github.token }}"}}'
+
+jobs:
+
+  cgl:
+    name: "cgl"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v6
+        with:
+          # Only "files/": content-addressed dist archives, so a restored entry
+          # can never be stale. "repo/" holds packagist metadata and would be.
+          path: ".Build/.cache/composer/files"
+          key: "composer-8.2-v14-${{ hashFiles('composer.json') }}"
+          restore-keys: |
+            composer-8.2-v14-
+            composer-8.2-
+
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s composerValidate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s cgl -n"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s checkBom"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s checkExceptionCodes"
+
+  phpstan:
+    name: "phpstan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v6
+        with:
+          path: ".Build/.cache/composer/files"
+          key: "composer-8.2-v14-${{ hashFiles('composer.json') }}"
+          restore-keys: |
+            composer-8.2-v14-
+            composer-8.2-
+
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p 8.2 -s phpstan"
+
+  lint:
+    name: "lint (PHP ${{ matrix.php-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.2", "8.5" ]
+    steps:
+      - uses: actions/checkout@v6
+
+      # Needs no vendor tree and no core version.
+      - run: "Build/Scripts/runTests.sh -b docker -p ${{ matrix.php-version }} -s lintPhp"
+
+  unit:
+    name: "unit (PHP ${{ matrix.php-version }})"
+    runs-on: ubuntu-latest
+    needs: [ "cgl", "phpstan", "lint" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.2", "8.5" ]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v6
+        with:
+          path: ".Build/.cache/composer/files"
+          key: "composer-${{ matrix.php-version }}-v14-${{ hashFiles('composer.json') }}"
+          restore-keys: |
+            composer-${{ matrix.php-version }}-v14-
+            composer-${{ matrix.php-version }}-
+
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s unit"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s unitRandom"
+
+  functional-sqlite:
+    name: "functional sqlite (PHP ${{ matrix.php-version }})"
+    runs-on: ubuntu-22.04
+    needs: [ "unit" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.2", "8.5" ]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v6
+        with:
+          path: ".Build/.cache/composer/files"
+          key: "composer-${{ matrix.php-version }}-v14-${{ hashFiles('composer.json') }}"
+          restore-keys: |
+            composer-${{ matrix.php-version }}-v14-
+            composer-${{ matrix.php-version }}-
+
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s functional -d sqlite"
+
+  functional-dbms:
+    name: "functional ${{ matrix.dbms.name }} ${{ matrix.dbms.version }} (PHP ${{ matrix.php-version }})"
+    runs-on: ubuntu-22.04
+    needs: [ "functional-sqlite" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.2", "8.5" ]
+        dbms:
+          - { name: "mariadb", version: "10.4" }
+          - { name: "mysql", version: "8.0" }
+          - { name: "postgres", version: "10" }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v6
+        with:
+          path: ".Build/.cache/composer/files"
+          key: "composer-${{ matrix.php-version }}-v14-${{ hashFiles('composer.json') }}"
+          restore-keys: |
+            composer-${{ matrix.php-version }}-v14-
+            composer-${{ matrix.php-version }}-
+
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b docker -t 14 -p ${{ matrix.php-version }} -s functional -d ${{ matrix.dbms.name }} -i ${{ matrix.dbms.version }}"
+
+  # TODO: second functional lane on "-S apache" once solr.sh exists, one DBMS and
+  # one PHP version — DEVELOPMENT.md §17.6.
+
+  # The one check a branch ruleset should require: its name never changes, unlike
+  # every matrix leaf. "always()" is required — a skipped check blocks a pull
+  # request forever instead of reporting failure — and a skipped dependency counts
+  # as a failure, because a gate that did not run has not passed.
+  all-checks:
+    name: "all checks"
+    runs-on: ubuntu-latest
+    if: "always()"
+    needs:
+      - "cgl"
+      - "phpstan"
+      - "lint"
+      - "unit"
+      - "functional-sqlite"
+      - "functional-dbms"
+    steps:
+      - name: "Report the result of every job"
+        env:
+          NEEDS: "${{ toJSON(needs) }}"
+        run: 'echo "$NEEDS"'
+
+      - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')"
+        run: "exit 1"

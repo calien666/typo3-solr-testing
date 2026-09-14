@@ -1,0 +1,52 @@
+name: runner canary
+
+# Non-gating signal for when the two CI workarounds can be dropped: the "-b
+# docker" flag, and the ubuntu-22.04 pin the functional jobs still carry. Both
+# have an unknown shelf life, and 22.04 begins deprecation once 26.04 leaves
+# preview.
+#
+# Only mariadb runs: resolving a service container by name is the discriminator
+# between engines and images alike. arm64 is a real target — both
+# ghcr.io/typo3/core-testing-* and typo3solr/ext-solr publish arm64 manifests.
+#
+# When a cell is consistently green, move the gating workflow onto it and delete
+# the lane. A schedule only fires on the default branch.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ github.token }}"}}'
+
+jobs:
+
+  functional:
+    name: "functional mariadb — ${{ matrix.image }} / ${{ matrix.engine }}"
+    runs-on: "${{ matrix.image }}"
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "ubuntu-22.04", "ubuntu-24.04", "ubuntu-26.04", "ubuntu-24.04-arm" ]
+        engine: [ "docker", "podman" ]
+        exclude:
+          # The gating configuration; already proven by every pull request.
+          - image: "ubuntu-22.04"
+            engine: "docker"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Report runner, engine and networking versions"
+        run: |
+          . /etc/os-release && echo "runner: ${PRETTY_NAME} ($(uname -m))"
+          docker --version || true
+          podman --version || true
+          dpkg -l | grep -E 'podman|crun|aardvark|netavark' || true
+
+      - run: "Build/Scripts/runTests.sh -b ${{ matrix.engine }} -t 14 -p 8.2 -s composerUpdate"
+      - run: "Build/Scripts/runTests.sh -b ${{ matrix.engine }} -t 14 -p 8.2 -s functional -d mariadb"
